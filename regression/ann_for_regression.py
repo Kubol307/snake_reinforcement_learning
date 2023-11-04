@@ -28,16 +28,16 @@ optimizer = tf.keras.optimizers.Adam()
 
 model.compile(optimizer=optimizer, loss='mse')
 
-r = model.fit(X, Y, epochs=500)
+r = model.fit(X, Y, epochs=300)
 
 loss = r.history['loss']
 
 plt.plot(loss)
 
-Xtest = np.random.random((1000, 2))*10 - 5
+Xtest = np.random.random((1000, 2))*20 - 10
 Ytest = np.cos(2*Xtest[:, 0]) + np.cos(3*Xtest[:, 1])
 
-Y_hat = model.predict(Xtest)
+Y_hat = model.predict(np.cos(Xtest))
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')

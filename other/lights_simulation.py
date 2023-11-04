@@ -30,7 +30,9 @@ class Lights:
 
 class Settings:
     def __init__(self):
-        self.speed = 2
+        self.speed = 3
+        self.speed_upper = 2
+        self.speed_lower = 4
 
 class Car:
     def __init__(self, settings, left=True):
@@ -44,16 +46,29 @@ class Car:
             self.x = 960
             self.y = 2000
         self.moving = True
+        self.speed = np.random.uniform(self.settings.speed_lower, self.settings.speed_upper)
+
+        self.width = 55
+        self.height = 20
+
+        self.image = pygame.image.load('car.png')
+        self.image = pygame.transform.scale(self.image, (55, 20))
+
+        if not self.left:
+            self.image = pygame.transform.rotate(self.image, -90)
     def move(self):
         if self.left:
-            self.x -= self.settings.speed
+            self.x -= self.speed
         else:
-            self.y -= self.settings.speed
+            self.y -= self.speed
+    def draw(self, screen):
+        screen.blit(self.image, (self.x, self.y))
 
 class Simulation(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
         self.screen = pygame.display.set_mode((2000, 2000))
+        pygame.display.set_caption('Traffic simulator')
         self.screen_rect = self.screen.get_rect()
         self.clock = pygame.time.Clock()
         self.running = True
@@ -65,12 +80,12 @@ class Simulation(pygame.sprite.Sprite):
         self.v_cars = []
         # self.h_cars.append(self.car)
 
-        self.h_lights = Lights(1010, 850)
-        self.v_lights = Lights(850, 1010, True)
+        self.h_lights = Lights(1020, 850)
+        self.v_lights = Lights(1020, 1150, True)
 
-        self.line = 50
-        self.distance = 250
-        self.change_penalty = 2000
+        self.line = 100
+        self.distance = 150
+        self.change_penalty = 10_000
 
         self.start_time = time.time()
         self.time_passed = 0
@@ -78,11 +93,19 @@ class Simulation(pygame.sprite.Sprite):
         self.h_changing = False
         self.change_time = 1
 
+        self.acceleration = 0.05
+
+        self.distance_before_starting = 20
+
+        self.road_image = pygame.image.load('road.png')
+        self.road_image = pygame.transform.scale(self.road_image, (1000, 1000))
+
         # self.font = pygame.font.SysFont(self.settings.font, self.settings.font_size)
         # self.font1 = pygame.font.SysFont(self.settings.font, 30)
 
     def run(self):
         while self.running:
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
@@ -91,34 +114,55 @@ class Simulation(pygame.sprite.Sprite):
                         self.h_lights.change()
                         self.v_lights.change()
     
-            h = np.random.binomial(1, 0.018)
+            h = np.random.binomial(1, 0.01)
             if h == 1:
-                self.h_cars.append(Car(self.settings, True))
+                car = Car(self.settings, True)
+                if len(self.h_cars) > 0 and self.h_cars[-1].x < 2000 - car.width - 20:
+                    self.h_cars.append(car)
+                elif len(self.h_cars) == 0:
+                    self.h_cars.append(car)
+                
 
-            v = np.random.binomial(1, 0.003)
+            v = np.random.binomial(1, 0.01)
             if v == 1:
-                self.v_cars.append(Car(self.settings, False))
+                v_car = Car(self.settings, False)
+                if len(self.v_cars) > 0 and self.h_cars[-1].y < 2000 - v_car.width - 20:
+                    self.v_cars.append(v_car)
+                elif len(self.v_cars) == 0:
+                    self.v_cars.append(v_car)
             
             self.screen.fill((0,0,0))
+            self.screen.blit(self.road_image, (420, 550))
+            self.screen.blit(self.road_image, (420-850, 550))
+            self.screen.blit(self.road_image, (420+850, 550))
+            self.screen.blit(self.road_image, (420, 550-850))
+            self.screen.blit(self.road_image, (420, 550+850))
+
             try:
-                if self.h_lights.red:
-                    for car in self.h_cars:
-                        if car.x >= self.h_lights.x + 2 and car.x <= self.h_lights.x + 5:
-                            car.moving = False
-                else:
-                    for car in self.h_cars:
-                        car.moving = True
+                for i, car in enumerate(self.h_cars): 
+                    if car.x >= self.h_lights.x + 2 and car.x <= self.h_lights.x + 5 and self.h_lights.red:
+                        car.speed = 0
+                        
+                    elif i > 0 and self.h_cars[i - 1].x <= car.x - self.distance_before_starting:
+                        if car.speed < self.settings.speed:
+                            car.speed += self.acceleration
+                    elif i == 0:
+                        if car.speed < self.settings.speed:
+                            car.speed += self.acceleration
             except:
                 pass
 
             try:
-                if self.v_lights.red:
-                    for car in self.v_cars:
-                        if car.y >= self.v_lights.y + 2 and car.y <= self.v_lights.y + 5:
-                            car.moving = False
-                else:
-                    for car in self.v_cars:
-                        car.moving = True
+                for i, car in enumerate(self.v_cars): 
+                    if car.y >= self.v_lights.y + 2 and car.y <= self.v_lights.y + 5 and self.v_lights.red:
+                        car.speed = 0
+                        
+                    elif i > 0 and self.v_cars[i - 1].y <= car.y - self.distance_before_starting:
+                        if car.speed < self.settings.speed:
+                            car.speed += self.acceleration
+                    elif i == 0:
+                        if car.speed < self.settings.speed:
+                            car.speed += self.acceleration
             except:
                 pass
 
@@ -135,9 +179,18 @@ class Simulation(pygame.sprite.Sprite):
                         car.cost = 0
 
                 for another_car in self.h_cars:
-                    if another_car.x <= car.x - 12 and another_car.x >= car.x - 15 and another_car.moving == False:
-                        car.moving = False
-                pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(car.x, car.y, 10, 10))
+                    if another_car.x <= car.x - 40 and another_car.x >= car.x - 55 and another_car.speed < car.speed:
+                        car.speed = another_car.speed
+                    elif another_car.x <= car.x - 55 and another_car.x >= car.x - 140 and another_car.speed < car.speed:
+                        if car.speed > 1:
+                            car.speed -= 0.1
+
+                    # if car.speed < self.settings.speed:
+                    #     car.speed += self.acceleration
+
+
+                # pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(car.x, car.y, 10, 10))
+                car.draw(self.screen)
                 if car.moving:
                     car.move()
                 if car.x <= 0:
@@ -150,29 +203,45 @@ class Simulation(pygame.sprite.Sprite):
                         car.cost += 15
                         v_cost += car.cost 
                     elif car.y >= self.v_lights.y and car.y <= self.v_lights.y + self.line:
-                        car.cost += 15
+                        car.cost += 50
                         v_cost += car.cost 
                     else:
                         car.cost = 0
 
                 for another_car in self.v_cars:
-                    if another_car.y <= car.y - 12 and another_car.y >= car.y - 15 and another_car.moving == False:
-                        car.moving = False
-                pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(car.x, car.y, 10, 10))
+                    if another_car.y <= car.y - 40 and another_car.y >= car.y - 55 and another_car.speed < car.speed:
+                        car.speed = another_car.speed
+                    elif another_car.y <= car.y - 55 and another_car.y >= car.y - 140 and another_car.speed < car.speed:
+                        if car.speed > 1:
+                            car.speed -= 0.1
+
+                # pygame.draw.rect(self.screen, (255, 255, 255), pygame.Rect(car.x, car.y, 10, 10))
+                car.draw(self.screen)
                 if car.moving:
                     car.move()
                 try:
                     if car.y <= 0:
-                        self.h_cars.remove(car)
+                        self.v_cars.remove(car)
                 except:
                     pass
 
             if self.v_changing or self.h_changing:
                 self.time_passed = time.time() - self.start_time
-                print(self.time_passed)
 
 
             if not self.v_changing and not self.h_changing:
+                # if h_cost == 0 and v_cost > 0 and self.v_lights.red:
+                #     self.h_lights.change()
+                #     self.h_lights.draw(self.screen)
+                #     self.start_time = time.time()
+                #     self.v_changing = True
+                #     print('both red')
+                # elif v_cost == 0 and h_cost > 0 and self.h_lights.red:
+                #     self.v_lights.change()
+                #     self.v_lights.draw(self.screen)
+                #     self.start_time = time.time()
+                #     self.h_changing = True
+                #     print('both red')
                 if h_cost > v_cost + self.change_penalty and self.h_lights.red:
                     self.v_lights.change()
                     self.v_lights.draw(self.screen)
